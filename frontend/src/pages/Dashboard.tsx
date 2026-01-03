@@ -1,74 +1,125 @@
 ﻿import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Activity, Server, MessageSquare, ShieldCheck } from 'lucide-react';
+import { Activity, Server, MessageSquare, Power, RefreshCw } from 'lucide-react';
 
 export default function Dashboard() {
   const [apiStatus, setApiStatus] = useState("Verificando...");
-  const [loading, setLoading] = useState(true);
+  const [botStatus, setBotStatus] = useState(false);
+  const [loading, setLoading] = useState(false);
+  
+  // Estatisticas (Mock por enquanto)
+  const [stats, setStats] = useState({ sent: 0, pending: 0, errors: 0 });
+
+  // Funcao para checar status geral
+  const checkStatus = () => {
+    // 1. Checa API
+    axios.get('http://127.0.0.1:8000/')
+      .then(() => setApiStatus("Online"))
+      .catch(() => setApiStatus("Offline"));
+
+    // 2. Checa Status do Robo
+    axios.get('http://127.0.0.1:8000/bot/status')
+      .then(res => setBotStatus(res.data.is_running))
+      .catch(() => setBotStatus(false));
+
+    // 3. Atualiza contadores (busca mensagens reais)
+    axios.get('http://127.0.0.1:8000/messages')
+      .then(res => {
+        const msgs = res.data;
+        setStats({
+          sent: msgs.filter((m: any) => m.status === 'sent').length,
+          pending: msgs.filter((m: any) => m.status === 'pending').length,
+          errors: msgs.filter((m: any) => m.status === 'error').length
+        });
+      });
+  };
 
   useEffect(() => {
-    // Busca o status real do Backend Python
-    axios.get('http://127.0.0.1:8000/')
-      .then(res => {
-        setApiStatus(res.data.status || "Online");
-        setLoading(false);
-      })
-      .catch(() => {
-        setApiStatus("Offline");
-        setLoading(false);
-      });
+    checkStatus();
+    const interval = setInterval(checkStatus, 5000); // Atualiza a cada 5s
+    return () => clearInterval(interval);
   }, []);
 
-  // Variaveis de estilo para evitar conflito no PowerShell
-  const cardBase = "bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg";
+  // Funcao para Ligar/Desligar Robo
+  const toggleBot = () => {
+    setLoading(true);
+    const endpoint = botStatus ? '/bot/stop' : '/bot/start';
+    
+    axios.post('http://127.0.0.1:8000' + endpoint)
+      .then(res => {
+        alert(res.data.message);
+        checkStatus();
+        setLoading(false);
+      })
+      .catch(err => {
+        alert("Erro ao controlar robo: " + err.message);
+        setLoading(false);
+      });
+  };
+
+  // Variaveis de estilo
+  const cardBase = "bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg transition-all";
   const textTitle = "text-slate-400 text-sm font-medium mb-1";
   const textValue = "text-2xl font-bold text-white";
-
-  // Logica de cor do icone baseada no status
-  const iconColor = apiStatus === "online" ? "bg-green-500/20 text-green-500" : "bg-red-500/20 text-red-500";
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-3xl font-bold text-white">Painel de Controle</h2>
-        <span className="text-xs text-slate-500">Atualizado em tempo real</span>
+        <div>
+          <h2 className="text-3xl font-bold text-white">Painel de Controle</h2>
+          <span className="text-xs text-slate-500">Monitoramento em Tempo Real</span>
+        </div>
+        
+        {/* Botao Mestre de Controle */}
+        <button 
+          onClick={toggleBot}
+          disabled={loading}
+          className={"flex items-center gap-3 px-6 py-3 rounded-lg font-bold shadow-lg transition-all " + 
+            (botStatus 
+              ? "bg-red-500/20 text-red-400 border border-red-500/50 hover:bg-red-500/30" 
+              : "bg-green-600 text-white hover:bg-green-700 hover:shadow-green-900/50")
+          }
+        >
+          <Power size={24} />
+          {loading ? "Processando..." : (botStatus ? "DESLIGAR ROBÔ" : "INICIAR ROBÔ")}
+        </button>
       </div>
 
       {/* Grid de Indicadores */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         
-        {/* Card 1: Status do Sistema */}
+        {/* Card 1: Status da API */}
         <div className={cardBase}>
           <div className="flex items-center justify-between">
             <div>
               <p className={textTitle}>Status da API</p>
-              <h3 className={textValue}>{loading ? "..." : apiStatus.toUpperCase()}</h3>
+              <h3 className={textValue}>{apiStatus.toUpperCase()}</h3>
             </div>
-            <div className={"p-3 rounded-full " + iconColor}>
+            <div className={"p-3 rounded-full " + (apiStatus === "Online" ? "bg-green-500/20 text-green-500" : "bg-red-500/20 text-red-500")}>
               <Server size={24} />
             </div>
           </div>
         </div>
 
-        {/* Card 2: Dispositivos (Mock) */}
-        <div className={cardBase}>
+        {/* Card 2: Status do Robo */}
+        <div className={cardBase + (botStatus ? " border-green-500/50" : "")}>
           <div className="flex items-center justify-between">
             <div>
-              <p className={textTitle}>WhatsApp Conectado</p>
-              <h3 className={textValue}>Nao</h3>
+              <p className={textTitle}>Motor de Envio</p>
+              <h3 className={textValue}>{botStatus ? "RODANDO" : "PARADO"}</h3>
             </div>
-            <div className="p-3 rounded-full bg-orange-500/20 text-orange-500">
-              <ShieldCheck size={24} />
+            <div className={"p-3 rounded-full " + (botStatus ? "bg-green-500/20 text-green-500 animate-pulse" : "bg-slate-700 text-slate-500")}>
+              <Activity size={24} />
             </div>
           </div>
         </div>
 
-        {/* Card 3: Mensagens (Mock) */}
+        {/* Card 3: Mensagens Enviadas */}
         <div className={cardBase}>
           <div className="flex items-center justify-between">
             <div>
-              <p className={textTitle}>Mensagens Hoje</p>
-              <h3 className={textValue}>0</h3>
+              <p className={textTitle}>Enviadas Hoje</p>
+              <h3 className={textValue}>{stats.sent}</h3>
             </div>
             <div className="p-3 rounded-full bg-blue-500/20 text-blue-500">
               <MessageSquare size={24} />
@@ -76,28 +127,38 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Card 4: Atividade (Mock) */}
+        {/* Card 4: Pendentes */}
         <div className={cardBase}>
           <div className="flex items-center justify-between">
             <div>
-              <p className={textTitle}>Fila de Envio</p>
-              <h3 className={textValue}>0</h3>
+              <p className={textTitle}>Na Fila</p>
+              <h3 className={textValue}>{stats.pending}</h3>
             </div>
-            <div className="p-3 rounded-full bg-purple-500/20 text-purple-500">
-              <Activity size={24} />
+            <div className="p-3 rounded-full bg-orange-500/20 text-orange-500">
+              <RefreshCw size={24} />
             </div>
           </div>
         </div>
 
       </div>
 
-      {/* Area de Graficos ou Listas Futuras */}
-      <div className="mt-8 bg-slate-900 rounded-xl border border-slate-800 p-6">
-        <h3 className="text-xl font-bold text-white mb-4">Ultimas Atividades do Sistema</h3>
-        <div className="text-slate-400 text-sm text-center py-10">
-          Nenhuma atividade registrada no momento.
+      {/* Instrucoes */}
+      {!botStatus && (
+        <div className="mt-8 bg-blue-900/20 border border-blue-800 rounded-xl p-6 flex items-start gap-4">
+          <div className="p-2 bg-blue-600 rounded-lg text-white mt-1">
+            <MessageSquare size={20} />
+          </div>
+          <div>
+            <h4 className="text-lg font-bold text-white">Como Iniciar</h4>
+            <p className="text-slate-400 text-sm mt-1">
+              1. Clique no botao verde "INICIAR ROBÔ" acima.<br/>
+              2. Uma janela do Chrome vai abrir.<br/>
+              3. Escaneie o QR Code com o seu WhatsApp.<br/>
+              4. O sistema começara a processar a fila de mensagens automaticamente.
+            </p>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
