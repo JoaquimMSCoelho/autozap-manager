@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Clock, CheckCircle, AlertCircle, RefreshCw, Send, X } from 'lucide-react';
+import { Clock, CheckCircle, AlertCircle, RefreshCw, Send, X, Users, Smartphone } from 'lucide-react';
 
 interface Message {
   id: number;
@@ -11,32 +11,44 @@ interface Message {
   connection_id: number;
 }
 
+interface Group {
+  id: number;
+  name: string;
+  contact_count: number;
+}
+
 export default function Messages() {
   const [messages, setMessages] = useState<Message[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(false);
   
-  // Estados do Modal de Envio
+  // Estados do Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newPhone, setNewPhone] = useState("");
-  const [newText, setNewText] = useState("");
+  const [sendMode, setSendMode] = useState<'single' | 'group'>('single'); // single ou group
+  
+  // Formulario
+  const [targetPhone, setTargetPhone] = useState("");
+  const [selectedGroupId, setSelectedGroupId] = useState("");
+  const [msgContent, setMsgContent] = useState("");
   const [sending, setSending] = useState(false);
 
-  const fetchMessages = () => {
+  const fetchData = () => {
     setLoading(true);
+    // Busca mensagens
     axios.get('http://127.0.0.1:8000/messages')
       .then(res => {
         setMessages(res.data);
         setLoading(false);
-      })
-      .catch(err => {
-        console.error(err);
-        setLoading(false);
       });
+      
+    // Busca grupos para o select
+    axios.get('http://127.0.0.1:8000/groups')
+      .then(res => setGroups(res.data));
   };
 
   useEffect(() => {
-    fetchMessages();
-    const interval = setInterval(fetchMessages, 5000);
+    fetchData();
+    const interval = setInterval(fetchData, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -44,28 +56,43 @@ export default function Messages() {
     return new Date(dateString).toLocaleString('pt-BR');
   };
 
-  // Funcao para enviar mensagem manual
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
     setSending(true);
 
-    axios.post('http://127.0.0.1:8000/messages', {
-      phone_dest: newPhone,
-      content: newText,
-      connection_id: 1 // Usando a conexao padrao 1
-    })
-    .then(() => {
-      alert("Mensagem agendada com sucesso!");
-      setIsModalOpen(false);
-      setNewPhone("");
-      setNewText("");
-      setSending(false);
-      fetchMessages(); // Atualiza a lista
-    })
-    .catch(err => {
-      alert("Erro ao agendar: " + err.message);
-      setSending(false);
-    });
+    if (sendMode === 'single') {
+        // Envio Unico
+        axios.post('http://127.0.0.1:8000/messages', {
+            phone_dest: targetPhone,
+            content: msgContent,
+            connection_id: 1
+        })
+        .then(() => finishSubmit("Mensagem agendada!"))
+        .catch(err => handleError(err));
+    } else {
+        // Envio em Massa (Broadcast)
+        axios.post('http://127.0.0.1:8000/broadcast', {
+            group_id: parseInt(selectedGroupId),
+            content: msgContent,
+            connection_id: 1
+        })
+        .then(res => finishSubmit(res.data.message))
+        .catch(err => handleError(err));
+    }
+  };
+
+  const finishSubmit = (msg: string) => {
+    alert(msg);
+    setIsModalOpen(false);
+    setMsgContent("");
+    setTargetPhone("");
+    setSending(false);
+    fetchData();
+  };
+
+  const handleError = (err: any) => {
+    alert("Erro: " + err.message);
+    setSending(false);
   };
 
   // Estilos
@@ -75,64 +102,102 @@ export default function Messages() {
     <div>
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h2 className="text-3xl font-bold text-white">Logs de Envio</h2>
-          <p className="text-slate-400">Historico e fila de processamento</p>
+          <h2 className="text-3xl font-bold text-white">Central de Disparos</h2>
+          <p className="text-slate-400">Gerencie filas e campanhas</p>
         </div>
         <div className="flex gap-3">
-            <button onClick={fetchMessages} className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded flex items-center gap-2 border border-slate-700 transition-colors">
+            <button onClick={fetchData} className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded flex items-center gap-2 border border-slate-700 transition-colors">
             <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
             </button>
-            <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded flex items-center gap-2 transition-colors font-bold shadow-lg shadow-blue-900/50">
+            <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded flex items-center gap-2 transition-colors font-bold shadow-lg shadow-blue-900/50">
             <Send size={18} />
-            Nova Mensagem
+            Criar Campanha
             </button>
         </div>
       </div>
 
-      {/* Modal de Envio Manual */}
+      {/* Modal de Envio */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 w-full max-w-md shadow-2xl animate-fade-in">
                 <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-xl font-bold text-white">Novo Disparo</h3>
+                    <h3 className="text-xl font-bold text-white">Nova Campanha</h3>
                     <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white">
                         <X size={24} />
                     </button>
                 </div>
                 
-                <form onSubmit={handleSend}>
-                    <label className="block text-slate-400 text-sm mb-1">Numero (com DDI e DDD)</label>
-                    <input 
-                        type="text" 
-                        placeholder="Ex: 5511999999999" 
-                        className={inputStyle}
-                        value={newPhone}
-                        onChange={e => setNewPhone(e.target.value)}
-                        required
-                    />
+                {/* Abas de Selecao */}
+                <div className="flex bg-slate-900 p-1 rounded-lg mb-6">
+                    <button 
+                        onClick={() => setSendMode('single')}
+                        className={"flex-1 py-2 text-sm font-bold rounded-md flex items-center justify-center gap-2 transition-all " + (sendMode === 'single' ? "bg-slate-700 text-white shadow" : "text-slate-500 hover:text-slate-300")}
+                    >
+                        <Smartphone size={16} /> Individual
+                    </button>
+                    <button 
+                        onClick={() => setSendMode('group')}
+                        className={"flex-1 py-2 text-sm font-bold rounded-md flex items-center justify-center gap-2 transition-all " + (sendMode === 'group' ? "bg-blue-600 text-white shadow" : "text-slate-500 hover:text-slate-300")}
+                    >
+                        <Users size={16} /> Grupo
+                    </button>
+                </div>
 
-                    <label className="block text-slate-400 text-sm mb-1">Mensagem</label>
+                <form onSubmit={handleSend}>
+                    {sendMode === 'single' ? (
+                        <>
+                            <label className="block text-slate-400 text-sm mb-1">Numero de Destino</label>
+                            <input 
+                                type="text" 
+                                placeholder="Ex: 5511999999999" 
+                                className={inputStyle}
+                                value={targetPhone}
+                                onChange={e => setTargetPhone(e.target.value)}
+                                required
+                            />
+                        </>
+                    ) : (
+                        <>
+                            <label className="block text-slate-400 text-sm mb-1">Selecione o Grupo</label>
+                            <select 
+                                className={inputStyle}
+                                value={selectedGroupId}
+                                onChange={e => setSelectedGroupId(e.target.value)}
+                                required
+                            >
+                                <option value="">-- Escolha um segmento --</option>
+                                {groups.map(g => (
+                                    <option key={g.id} value={g.id}>
+                                        {g.name} ({g.contact_count} contatos)
+                                    </option>
+                                ))}
+                            </select>
+                        </>
+                    )}
+
+                    <label className="block text-slate-400 text-sm mb-1">Conteúdo da Mensagem</label>
                     <textarea 
                         rows={4}
-                        placeholder="Digite o conteudo..." 
+                        placeholder="Digite sua mensagem aqui..." 
                         className={inputStyle}
-                        value={newText}
-                        onChange={e => setNewText(e.target.value)}
+                        value={msgContent}
+                        onChange={e => setMsgContent(e.target.value)}
                         required
                     />
 
                     <button 
                         type="submit" 
                         disabled={sending}
-                        className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-bold transition-colors disabled:opacity-50"
+                        className={"w-full py-3 rounded-lg font-bold transition-colors disabled:opacity-50 " + (sendMode === 'group' ? "bg-blue-600 hover:bg-blue-700 text-white" : "bg-green-600 hover:bg-green-700 text-white")}
                     >
-                        {sending ? "Agendando..." : "Adicionar a Fila"}
+                        {sending ? "Processando..." : (sendMode === 'group' ? `Disparar para Grupo` : "Enviar Mensagem")}
                     </button>
                 </form>
             </div>
         </div>
       )}
 
+      {/* Lista de Logs */}
       <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-xl">
         <table className="w-full text-left">
           <thead className="bg-slate-900 text-slate-400 uppercase text-xs font-bold">

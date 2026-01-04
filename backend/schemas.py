@@ -12,7 +12,7 @@ class ConnectionCreate(ConnectionBase):
 
 class ConnectionResponse(ConnectionBase):
     id: int
-    status: str
+    status: str = "active"
     is_active: bool
     class Config:
         from_attributes = True
@@ -33,7 +33,7 @@ class MessageResponse(MessageBase):
     class Config:
         from_attributes = True
 
-# --- Configuracoes (NOVO) ---
+# --- Configuracoes ---
 class ConfigBase(BaseModel):
     key_name: str
     value: str
@@ -46,3 +46,36 @@ class ConfigResponse(ConfigBase):
     id: int
     class Config:
         from_attributes = True
+
+# --- GRUPOS E CONTATOS ---
+class GroupBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+class GroupCreate(GroupBase):
+    pass
+
+class GroupResponse(GroupBase):
+    id: int
+    contact_count: int = 0
+    class Config:
+        from_attributes = True
+
+class ContactBase(BaseModel):
+    name: str
+    phone: str
+
+class ContactCreate(ContactBase):
+    group_id: int
+
+class ContactResponse(ContactBase):
+    id: int
+    group_id: int
+    class Config:
+        from_attributes = True
+
+# --- BROADCAST ---
+class BroadcastCreate(BaseModel):
+    group_id: int
+    content: str
+    connection_id: int

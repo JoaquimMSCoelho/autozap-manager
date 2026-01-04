@@ -5,6 +5,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 from webdriver_manager.chrome import ChromeDriverManager
 import time
 import urllib.parse
@@ -46,26 +47,40 @@ class WhatsAppBot:
             return {"status": "error", "message": "O Robo esta desligado"}
 
         try:
-            # 1. Prepara a URL (codifica espacos e acentos)
             msg_encoded = urllib.parse.quote(message)
             link = f"https://web.whatsapp.com/send?phone={phone}&text={msg_encoded}"
-            
-            # 2. Navega para o chat especifico
             self.driver.get(link)
 
-            # 3. Espera o botao de enviar aparecer (max 30 segundos)
-            # O seletor abaixo procura o icone de envio padrao do WhatsApp Web
-            send_button = WebDriverWait(self.driver, 30).until(
-                EC.element_to_be_clickable((By.XPATH, '//span[@data-icon="send"]'))
-            )
+            # --- AUMENTAMOS O TEMPO DE 15s PARA 40s ---
+            try:
+                WebDriverWait(self.driver, 40).until(
+                    EC.any_of(
+                        EC.presence_of_element_located((By.XPATH, '//span[@data-icon="send"]')),
+                        EC.presence_of_element_located((By.XPATH, '//div[contains(text(), "inválido")]')),
+                        EC.presence_of_element_located((By.XPATH, '//div[contains(text(), "invalid")]'))
+                    )
+                )
+            except TimeoutException:
+                 return {"status": "error", "message": "Timeout: WhatsApp demorou mais de 40s para carregar"}
+
+            # Verifica se apareceu o pop-up de numero invalido
+            invalid_popup = self.driver.find_elements(By.XPATH, '//div[contains(text(), "inválido")]') or \
+                            self.driver.find_elements(By.XPATH, '//div[contains(text(), "invalid")]')
             
-            # 4. Clica em enviar
-            time.sleep(2) # Pequena pausa humana
+            if invalid_popup:
+                time.sleep(1)
+                webdriver.ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
+                return {"status": "error", "message": "Numero invalido ou nao possui WhatsApp"}
+
+            # Se chegou aqui, clica em enviar.
+            send_button = self.driver.find_element(By.XPATH, '//span[@data-icon="send"]')
+            time.sleep(1)
             send_button.click()
-            time.sleep(2) # Espera o envio confirmar visualmente
+            time.sleep(2) 
             
             return {"status": "sent", "message": "Mensagem enviada"}
+            
         except Exception as e:
-            return {"status": "error", "message": f"Falha ao enviar: {str(e)}"}
+            return {"status": "error", "message": f"Falha tecnica: {str(e)}"}
 
 bot_instance = WhatsAppBot()
