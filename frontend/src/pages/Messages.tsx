@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Clock, CheckCircle, AlertCircle, RefreshCw, Send, X, Users, Smartphone } from 'lucide-react';
+import { Clock, CheckCircle, AlertCircle, RefreshCw, Send, X, Users, Smartphone, Megaphone } from 'lucide-react';
 
 interface Message {
   id: number;
@@ -24,7 +24,7 @@ export default function Messages() {
   
   // Estados do Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [sendMode, setSendMode] = useState<'single' | 'group'>('single'); // single ou group
+  const [sendMode, setSendMode] = useState<'single' | 'group'>('single');
   
   // Formulario
   const [targetPhone, setTargetPhone] = useState("");
@@ -41,7 +41,7 @@ export default function Messages() {
         setLoading(false);
       });
       
-    // Busca grupos para o select
+    // Busca grupos
     axios.get('http://127.0.0.1:8000/groups')
       .then(res => setGroups(res.data));
   };
@@ -95,7 +95,6 @@ export default function Messages() {
     setSending(false);
   };
 
-  // Estilos
   const inputStyle = "w-full bg-slate-900 border border-slate-700 rounded p-3 text-white focus:border-blue-500 focus:outline-none mb-4";
 
   return (
@@ -127,7 +126,7 @@ export default function Messages() {
                     </button>
                 </div>
                 
-                {/* Abas de Selecao */}
+                {/* Abas */}
                 <div className="flex bg-slate-900 p-1 rounded-lg mb-6">
                     <button 
                         onClick={() => setSendMode('single')}
@@ -139,7 +138,7 @@ export default function Messages() {
                         onClick={() => setSendMode('group')}
                         className={"flex-1 py-2 text-sm font-bold rounded-md flex items-center justify-center gap-2 transition-all " + (sendMode === 'group' ? "bg-blue-600 text-white shadow" : "text-slate-500 hover:text-slate-300")}
                     >
-                        <Users size={16} /> Grupo
+                        <Users size={16} /> Grupo / Todos
                     </button>
                 </div>
 
@@ -158,7 +157,7 @@ export default function Messages() {
                         </>
                     ) : (
                         <>
-                            <label className="block text-slate-400 text-sm mb-1">Selecione o Grupo</label>
+                            <label className="block text-slate-400 text-sm mb-1">Selecione o Público</label>
                             <select 
                                 className={inputStyle}
                                 value={selectedGroupId}
@@ -166,6 +165,7 @@ export default function Messages() {
                                 required
                             >
                                 <option value="">-- Escolha um segmento --</option>
+                                <option value="-1" className="font-bold text-yellow-400">📢 ENVIAR PARA TODA A LISTA (GERAL)</option>
                                 {groups.map(g => (
                                     <option key={g.id} value={g.id}>
                                         {g.name} ({g.contact_count} contatos)
@@ -190,14 +190,18 @@ export default function Messages() {
                         disabled={sending}
                         className={"w-full py-3 rounded-lg font-bold transition-colors disabled:opacity-50 " + (sendMode === 'group' ? "bg-blue-600 hover:bg-blue-700 text-white" : "bg-green-600 hover:bg-green-700 text-white")}
                     >
-                        {sending ? "Processando..." : (sendMode === 'group' ? `Disparar para Grupo` : "Enviar Mensagem")}
+                        {sending ? "Processando..." : (
+                            sendMode === 'group' 
+                                ? (selectedGroupId === "-1" ? "⚠️ Disparar para TODOS" : "Disparar para Grupo") 
+                                : "Enviar Mensagem"
+                        )}
                     </button>
                 </form>
             </div>
         </div>
       )}
 
-      {/* Lista de Logs */}
+      {/* Tabela de Mensagens */}
       <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-xl">
         <table className="w-full text-left">
           <thead className="bg-slate-900 text-slate-400 uppercase text-xs font-bold">

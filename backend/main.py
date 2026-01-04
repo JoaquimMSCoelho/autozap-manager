@@ -2,6 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List
+from datetime import datetime, date
 import models
 import schemas
 from database import engine, SessionLocal, get_db
@@ -25,6 +26,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# --- LISTA DE SIGLAS CONHECIDAS ---
+KNOWN_PREFIXES = [
+    "ADVR", "ADSE", "IRPF", "IRNF", "PRGS", "UBER", 
+    "INF", "MEI", "FAM", "DEP", "SIC", "LAN", "MAN", "NIP", 
+    "AD", "IR"
+]
 
 # --- WORKER ---
 def background_worker():
@@ -77,6 +85,36 @@ def stop_bot():
 def get_bot_status():
     return {"is_running": bot_instance.is_running}
 
+# --- NOVA ROTA DE ESTATISTICAS (DASHBOARD) ---
+@app.get("/dashboard-stats")
+def get_dashboard_stats(db: Session = Depends(get_db)):
+    # Data de hoje zerada (00:00:00)
+    today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # Consultas
+    total_sent_today = db.query(models.Message).filter(
+        models.Message.status == "sent", 
+        models.Message.created_at >= today_start
+    ).count()
+    
+    total_pending = db.query(models.Message).filter(models.Message.status == "pending").count()
+    
+    total_error_today = db.query(models.Message).filter(
+        models.Message.status == "error",
+        models.Message.created_at >= today_start
+    ).count()
+
+    # Proximos 3 da fila para exibir
+    next_queue = db.query(models.Message).filter(models.Message.status == "pending").limit(3).all()
+
+    return {
+        "sent_today": total_sent_today,
+        "pending": total_pending,
+        "error_today": total_error_today,
+        "is_running": bot_instance.is_running,
+        "next_in_queue": next_queue
+    }
+
 # --- ROTAS DE GRUPOS E IMPORTACAO ---
 
 @app.post("/import-contacts")
@@ -94,14 +132,18 @@ async def import_contacts(file: UploadFile = File(...), db: Session = Depends(ge
         raw_name = str(row.get('nome', ''))
         phone = str(row.get('telefone', ''))
         
+        group_name = "GERAL" 
+        clean_name = raw_name
+
         match = re.search(r"\[(.*?)\]", raw_name)
-        
         if match:
             group_name = match.group(1).upper()
-            clean_name = raw_name
         else:
-            group_name = "GERAL"
-            clean_name = raw_name
+            name_upper = raw_name.upper()
+            for sigla in KNOWN_PREFIXES:
+                if sigla in name_upper:
+                    group_name = sigla
+                    break
 
         group = db.query(models.Group).filter(models.Group.name == group_name).first()
         if not group:
@@ -134,13 +176,16 @@ def list_groups(db: Session = Depends(get_db)):
 def list_contacts_by_group(group_id: int, db: Session = Depends(get_db)):
     return db.query(models.Contact).filter(models.Contact.group_id == group_id).all()
 
-# --- NOVA ROTA DE BROADCAST ---
+# --- ROTA DE BROADCAST ---
 @app.post("/broadcast")
 def create_broadcast(broadcast: schemas.BroadcastCreate, db: Session = Depends(get_db)):
-    contacts = db.query(models.Contact).filter(models.Contact.group_id == broadcast.group_id).all()
+    if broadcast.group_id == -1:
+        contacts = db.query(models.Contact).all()
+    else:
+        contacts = db.query(models.Contact).filter(models.Contact.group_id == broadcast.group_id).all()
     
     if not contacts:
-        return {"status": "error", "message": "Este grupo esta vazio!"}
+        return {"status": "error", "message": "Nenhum contato encontrado!"}
 
     count = 0
     for contact in contacts:
@@ -154,7 +199,8 @@ def create_broadcast(broadcast: schemas.BroadcastCreate, db: Session = Depends(g
         count += 1
     
     db.commit()
-    return {"status": "success", "queued": count, "message": f"Campanha criada! {count} mensagens na fila."}
+    dest_name = "TODOS" if broadcast.group_id == -1 else "Grupo"
+    return {"status": "success", "queued": count, "message": f"Campanha para {dest_name} criada! {count} mensagens na fila."}
 
 
 # --- DEMAIS ROTAS ---

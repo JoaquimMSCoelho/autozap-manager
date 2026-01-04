@@ -1,164 +1,176 @@
-﻿import { useEffect, useState } from 'react';
+﻿import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Activity, Server, MessageSquare, Power, RefreshCw } from 'lucide-react';
+import { Play, Square, Activity, Send, Clock, AlertTriangle, ShieldCheck } from 'lucide-react';
+
+interface DashboardStats {
+  sent_today: number;
+  pending: number;
+  error_today: number;
+  is_running: boolean;
+  next_in_queue: Array<{
+    id: number;
+    phone_dest: string;
+    content: string;
+    status: string;
+  }>;
+}
 
 export default function Dashboard() {
-  const [apiStatus, setApiStatus] = useState("Verificando...");
-  const [botStatus, setBotStatus] = useState(false);
-  const [loading, setLoading] = useState(false);
-  
-  // Estatisticas (Mock por enquanto)
-  const [stats, setStats] = useState({ sent: 0, pending: 0, errors: 0 });
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [loadingAction, setLoadingAction] = useState(false);
 
-  // Funcao para checar status geral
-  const checkStatus = () => {
-    // 1. Checa API
-    axios.get('http://127.0.0.1:8000/')
-      .then(() => setApiStatus("Online"))
-      .catch(() => setApiStatus("Offline"));
-
-    // 2. Checa Status do Robo
-    axios.get('http://127.0.0.1:8000/bot/status')
-      .then(res => setBotStatus(res.data.is_running))
-      .catch(() => setBotStatus(false));
-
-    // 3. Atualiza contadores (busca mensagens reais)
-    axios.get('http://127.0.0.1:8000/messages')
-      .then(res => {
-        const msgs = res.data;
-        setStats({
-          sent: msgs.filter((m: any) => m.status === 'sent').length,
-          pending: msgs.filter((m: any) => m.status === 'pending').length,
-          errors: msgs.filter((m: any) => m.status === 'error').length
-        });
-      });
+  // Busca dados a cada 2 segundos para dar sensacao de "Tempo Real"
+  const fetchStats = () => {
+    axios.get('http://127.0.0.1:8000/dashboard-stats')
+      .then(res => setStats(res.data))
+      .catch(err => console.error(err));
   };
 
   useEffect(() => {
-    checkStatus();
-    const interval = setInterval(checkStatus, 5000); // Atualiza a cada 5s
+    fetchStats();
+    const interval = setInterval(fetchStats, 2000);
     return () => clearInterval(interval);
   }, []);
 
-  // Funcao para Ligar/Desligar Robo
-  const toggleBot = () => {
-    setLoading(true);
-    const endpoint = botStatus ? '/bot/stop' : '/bot/start';
-    
-    axios.post('http://127.0.0.1:8000' + endpoint)
+  const toggleBot = (action: 'start' | 'stop') => {
+    setLoadingAction(true);
+    axios.post(`http://127.0.0.1:8000/bot/${action}`)
       .then(res => {
         alert(res.data.message);
-        checkStatus();
-        setLoading(false);
+        fetchStats();
       })
-      .catch(err => {
-        alert("Erro ao controlar robo: " + err.message);
-        setLoading(false);
-      });
+      .catch(err => alert("Erro: " + err.message))
+      .finally(() => setLoadingAction(false));
   };
 
-  // Variaveis de estilo
-  const cardBase = "bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg transition-all";
-  const textTitle = "text-slate-400 text-sm font-medium mb-1";
-  const textValue = "text-2xl font-bold text-white";
+  if (!stats) return <div className="text-white p-10">Carregando Painel de Controle...</div>;
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="space-y-8 animate-fade-in">
+      {/* Cabecalho */}
+      <div className="flex justify-between items-end">
         <div>
-          <h2 className="text-3xl font-bold text-white">Painel de Controle</h2>
-          <span className="text-xs text-slate-500">Monitoramento em Tempo Real</span>
+          <h2 className="text-3xl font-bold text-white mb-2">Painel de Comando</h2>
+          <p className="text-slate-400">Visão geral da operação em tempo real</p>
         </div>
         
-        {/* Botao Mestre de Controle */}
-        <button 
-          onClick={toggleBot}
-          disabled={loading}
-          className={"flex items-center gap-3 px-6 py-3 rounded-lg font-bold shadow-lg transition-all " + 
-            (botStatus 
-              ? "bg-red-500/20 text-red-400 border border-red-500/50 hover:bg-red-500/30" 
-              : "bg-green-600 text-white hover:bg-green-700 hover:shadow-green-900/50")
-          }
-        >
-          <Power size={24} />
-          {loading ? "Processando..." : (botStatus ? "DESLIGAR ROBÔ" : "INICIAR ROBÔ")}
-        </button>
+        {/* Controle do Robo */}
+        <div className="flex items-center gap-4 bg-slate-800 p-2 rounded-lg border border-slate-700">
+           <div className="text-right mr-2">
+              <p className="text-xs text-slate-400 uppercase font-bold">Status do Motor</p>
+              <p className={stats.is_running ? "text-green-400 font-bold" : "text-slate-500 font-bold"}>
+                {stats.is_running ? "ONLINE ●" : "OFFLINE ○"}
+              </p>
+           </div>
+           
+           {!stats.is_running ? (
+             <button 
+               onClick={() => toggleBot('start')} 
+               disabled={loadingAction}
+               className="bg-green-600 hover:bg-green-500 text-white p-3 rounded-lg shadow-lg shadow-green-900/20 transition-all flex gap-2 items-center font-bold"
+             >
+               <Play size={20} fill="currentColor" /> INICIAR ROBÔ
+             </button>
+           ) : (
+             <button 
+               onClick={() => toggleBot('stop')} 
+               disabled={loadingAction}
+               className="bg-red-600 hover:bg-red-500 text-white p-3 rounded-lg shadow-lg shadow-red-900/20 transition-all flex gap-2 items-center font-bold"
+             >
+               <Square size={20} fill="currentColor" /> PARAR
+             </button>
+           )}
+        </div>
       </div>
 
-      {/* Grid de Indicadores */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* CARDS DE METRICAS */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         
-        {/* Card 1: Status da API */}
-        <div className={cardBase}>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className={textTitle}>Status da API</p>
-              <h3 className={textValue}>{apiStatus.toUpperCase()}</h3>
+        {/* Card 1: Produtividade Hoje */}
+        <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-4 opacity-10">
+                <Send size={100} />
             </div>
-            <div className={"p-3 rounded-full " + (apiStatus === "Online" ? "bg-green-500/20 text-green-500" : "bg-red-500/20 text-red-500")}>
-              <Server size={24} />
+            <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 bg-blue-500/20 rounded-lg text-blue-400">
+                    <Send size={24} />
+                </div>
+                <h3 className="text-slate-400 font-bold text-sm uppercase">Enviadas Hoje</h3>
             </div>
-          </div>
+            <p className="text-4xl font-bold text-white mt-2">{stats.sent_today}</p>
+            <p className="text-xs text-slate-500 mt-2">Mensagens entregues com sucesso</p>
         </div>
 
-        {/* Card 2: Status do Robo */}
-        <div className={cardBase + (botStatus ? " border-green-500/50" : "")}>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className={textTitle}>Motor de Envio</p>
-              <h3 className={textValue}>{botStatus ? "RODANDO" : "PARADO"}</h3>
+        {/* Card 2: Fila de Espera */}
+        <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-4 opacity-10">
+                <Clock size={100} />
             </div>
-            <div className={"p-3 rounded-full " + (botStatus ? "bg-green-500/20 text-green-500 animate-pulse" : "bg-slate-700 text-slate-500")}>
-              <Activity size={24} />
+            <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 bg-yellow-500/20 rounded-lg text-yellow-400">
+                    <Clock size={24} />
+                </div>
+                <h3 className="text-slate-400 font-bold text-sm uppercase">Fila de Espera</h3>
             </div>
-          </div>
+            <p className="text-4xl font-bold text-white mt-2">{stats.pending}</p>
+            <p className="text-xs text-slate-500 mt-2">Aguardando disparo</p>
         </div>
 
-        {/* Card 3: Mensagens Enviadas */}
-        <div className={cardBase}>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className={textTitle}>Enviadas Hoje</p>
-              <h3 className={textValue}>{stats.sent}</h3>
+        {/* Card 3: Erros/Falhas */}
+        <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-4 opacity-10">
+                <AlertTriangle size={100} />
             </div>
-            <div className="p-3 rounded-full bg-blue-500/20 text-blue-500">
-              <MessageSquare size={24} />
+            <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 bg-red-500/20 rounded-lg text-red-400">
+                    <Activity size={24} />
+                </div>
+                <h3 className="text-slate-400 font-bold text-sm uppercase">Erros Hoje</h3>
             </div>
-          </div>
+            <p className="text-4xl font-bold text-white mt-2">{stats.error_today}</p>
+            <p className="text-xs text-slate-500 mt-2">Falhas de conexão ou número inválido</p>
         </div>
-
-        {/* Card 4: Pendentes */}
-        <div className={cardBase}>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className={textTitle}>Na Fila</p>
-              <h3 className={textValue}>{stats.pending}</h3>
-            </div>
-            <div className="p-3 rounded-full bg-orange-500/20 text-orange-500">
-              <RefreshCw size={24} />
-            </div>
-          </div>
-        </div>
-
       </div>
 
-      {/* Instrucoes */}
-      {!botStatus && (
-        <div className="mt-8 bg-blue-900/20 border border-blue-800 rounded-xl p-6 flex items-start gap-4">
-          <div className="p-2 bg-blue-600 rounded-lg text-white mt-1">
-            <MessageSquare size={20} />
+      {/* LISTA DE PROXIMOS */}
+      <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-xl mt-8">
+          <div className="p-6 border-b border-slate-700 flex justify-between items-center">
+              <h3 className="font-bold text-white text-lg flex items-center gap-2">
+                  <ShieldCheck className="text-green-500" />
+                  Próximos na Fila de Disparo
+              </h3>
+              <span className="text-xs text-slate-500 bg-slate-900 px-2 py-1 rounded">Atualizado em tempo real</span>
           </div>
-          <div>
-            <h4 className="text-lg font-bold text-white">Como Iniciar</h4>
-            <p className="text-slate-400 text-sm mt-1">
-              1. Clique no botao verde "INICIAR ROBÔ" acima.<br/>
-              2. Uma janela do Chrome vai abrir.<br/>
-              3. Escaneie o QR Code com o seu WhatsApp.<br/>
-              4. O sistema começara a processar a fila de mensagens automaticamente.
-            </p>
-          </div>
-        </div>
-      )}
+          
+          {stats.next_in_queue.length === 0 ? (
+              <div className="p-10 text-center text-slate-500">
+                  <p>A fila está vazia. Bom trabalho! 🍹</p>
+              </div>
+          ) : (
+            <table className="w-full text-left">
+                <thead className="bg-slate-900 text-slate-400 uppercase text-xs font-bold">
+                    <tr>
+                    <th className="p-4">Destino</th>
+                    <th className="p-4">Mensagem (Preview)</th>
+                    <th className="p-4">Status</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-700 text-sm text-slate-300">
+                    {stats.next_in_queue.map(msg => (
+                        <tr key={msg.id} className="hover:bg-slate-700/50">
+                            <td className="p-4 font-mono text-blue-300">{msg.phone_dest}</td>
+                            <td className="p-4 text-slate-400 truncate max-w-xs">{msg.content}</td>
+                            <td className="p-4">
+                                <span className="bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded text-xs font-bold">
+                                    PENDING
+                                </span>
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+          )}
+      </div>
     </div>
   );
 }

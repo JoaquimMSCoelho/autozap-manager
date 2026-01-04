@@ -1,14 +1,15 @@
-# Python
-__pycache__/
-*.py[cod]
+# Pastas de Ambiente Virtual e Dependencias
 venv/
-*.db
-
-# Node / Frontend
 node_modules/
-dist/
-.env
+__pycache__/
 
-# Sistema
+# Arquivos compilados e de sistema
+*.pyc
 .DS_Store
-Thumbs.db
+dist/
+
+# Cache do Navegador (O Grande Culpado)
+backend/chrome_cache/
+
+# Screenshots de erro (nao precisamos salvar isso no historico)
+backend/*.png
