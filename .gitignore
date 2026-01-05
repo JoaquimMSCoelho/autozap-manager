@@ -1,15 +1,22 @@
-# Pastas de Ambiente Virtual e Dependencias
-venv/
-node_modules/
+﻿# --- PYTHON ---
 __pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.env
 
-# Arquivos compilados e de sistema
-*.pyc
-.DS_Store
+# --- DISTRIBUIÇÃO & BUILD (LIXO) ---
+build/
 dist/
+*.spec
 
-# Cache do Navegador (O Grande Culpado)
-backend/chrome_cache/
+# --- FRONTEND (NODE) ---
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.env
 
-# Screenshots de erro (nao precisamos salvar isso no historico)
-backend/*.png
+# --- ARQUIVOS DE SISTEMA ---
+.DS_Store
+Thumbs.db
