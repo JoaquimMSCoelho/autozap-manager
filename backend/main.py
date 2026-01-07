@@ -1,11 +1,12 @@
 import sys
 import os
-from fastapi import FastAPI, Depends, UploadFile, File, HTTPException
+import shutil
+from fastapi import FastAPI, Depends, UploadFile, File, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 import models
 import schemas
@@ -16,7 +17,7 @@ import time
 import pandas as pd
 import io
 import re
-import uvicorn # <--- IMPORTANTE: Adicionado para rodar o servidor
+import uvicorn
 
 # --- CONFIGURACAO INICIAL ---
 models.Base.metadata.create_all(bind=engine)
@@ -172,13 +173,49 @@ def create_broadcast(broadcast: schemas.BroadcastCreate, db: Session = Depends(g
 def list_messages(db: Session = Depends(get_db)):
     return db.query(models.Message).order_by(models.Message.created_at.desc()).limit(100).all()
 
-@app.post("/messages", response_model=schemas.MessageResponse)
-def create_message(msg: schemas.MessageCreate, db: Session = Depends(get_db)):
-    new_msg = models.Message(connection_id=msg.connection_id, phone_dest=msg.phone_dest, content=msg.content, status="pending")
+# --- ROTA CORRIGIDA (BLINDAGEM CONTRA TEXTO VAZIO) ---
+@app.post("/messages")
+def create_message(
+    phone_dest: str = Form(...), 
+    content: Optional[str] = Form(""), # <--- CORREÇÃO 1: Permite vazio por padrão
+    connection_id: int = Form(1), 
+    file: UploadFile = File(None), 
+    db: Session = Depends(get_db)
+):
+    # 1. Upload do Arquivo (Se houver)
+    media_path = None
+    if file:
+        os.makedirs("uploads", exist_ok=True)
+        # Sanitizar nome se necessario, mas mantendo simples
+        file_location = os.path.join("uploads", file.filename)
+        with open(file_location, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        media_path = os.path.abspath(file_location)
+
+    # 2. Prepara conteudo para o Robo (A TRAVA DE SEGURANÇA)
+    # Garante que seja string, mesmo que venha None
+    safe_content = content if content else ""
+    
+    final_content = safe_content
+    if media_path:
+        # Truque: Anexa o caminho da imagem no texto
+        # Mesmo que safe_content seja "", vai ficar "|||media:C:\..."
+        final_content = f"{safe_content}|||media:{media_path}"
+
+    # Validação Extra: Se não tem texto E não tem arquivo, erro.
+    if not final_content.strip() and not media_path:
+         return {"status": "error", "message": "Mensagem vazia (sem texto e sem arquivo)."}
+
+    new_msg = models.Message(
+        connection_id=connection_id, 
+        phone_dest=phone_dest, 
+        content=final_content, 
+        status="pending"
+    )
     db.add(new_msg)
     db.commit()
     db.refresh(new_msg)
-    return new_msg
+    return {"status": "success", "id": new_msg.id, "content": final_content}
 
 @app.get("/configs", response_model=List[schemas.ConfigResponse])
 def list_configs(db: Session = Depends(get_db)):
@@ -200,16 +237,12 @@ def update_config(config: schemas.ConfigCreate, db: Session = Depends(get_db)):
         db.refresh(new_config)
         return new_config
 
-# --- SERVIR O FRONTEND (ESTATICO) ---
-# Logica Hibrida: Funciona no VS Code E no .EXE
-
+# --- SERVIR FRONTEND ---
 if getattr(sys, 'frozen', False):
-    # MODO .EXE (Producao)
     base_path = os.path.dirname(sys.executable)
     frontend_path = os.path.join(base_path, "frontend", "dist")
     print(f"[INFO] Modo EXE detectado. Buscando site em: {frontend_path}")
 else:
-    # MODO DEV (VS Code)
     base_path = os.path.dirname(os.path.dirname(__file__))
     frontend_path = os.path.join(base_path, "frontend", "dist")
     print(f"[INFO] Modo DEV detectado. Buscando site em: {frontend_path}")
@@ -228,10 +261,6 @@ if os.path.exists(frontend_path):
         return FileResponse(os.path.join(frontend_path, "index.html"))
 else:
     print("AVISO CRITICO: Pasta frontend/dist nao encontrada.")
-    print(f"O sistema esperava encontrar em: {frontend_path}")
 
-# --- IGNICAO DO MOTOR (NOVO!) ---
-# Isso garante que o servidor inicie quando rodar o .EXE
 if __name__ == "__main__":
-    # Roda na porta 8000 e aceita conexoes locais
     uvicorn.run(app, host="127.0.0.1", port=8000)

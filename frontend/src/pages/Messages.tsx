@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Clock, CheckCircle, AlertCircle, RefreshCw, Send, X, Users, Smartphone, Megaphone } from 'lucide-react';
+import { Clock, CheckCircle, AlertCircle, RefreshCw, Send, X, Users, Smartphone, Paperclip, Trash2 } from 'lucide-react';
 
 interface Message {
   id: number;
@@ -30,18 +30,17 @@ export default function Messages() {
   const [targetPhone, setTargetPhone] = useState("");
   const [selectedGroupId, setSelectedGroupId] = useState("");
   const [msgContent, setMsgContent] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [sending, setSending] = useState(false);
 
   const fetchData = () => {
     setLoading(true);
-    // Busca mensagens
     axios.get('http://127.0.0.1:8000/messages')
       .then(res => {
         setMessages(res.data);
         setLoading(false);
       });
       
-    // Busca grupos
     axios.get('http://127.0.0.1:8000/groups')
       .then(res => setGroups(res.data));
   };
@@ -56,46 +55,60 @@ export default function Messages() {
     return new Date(dateString).toLocaleString('pt-BR');
   };
 
-  const handleSend = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSending(true);
-
-    if (sendMode === 'single') {
-        // Envio Unico
-        axios.post('http://127.0.0.1:8000/messages', {
-            phone_dest: targetPhone,
-            content: msgContent,
-            connection_id: 1
-        })
-        .then(() => finishSubmit("Mensagem agendada!"))
-        .catch(err => handleError(err));
-    } else {
-        // Envio em Massa (Broadcast)
-        axios.post('http://127.0.0.1:8000/broadcast', {
-            group_id: parseInt(selectedGroupId),
-            content: msgContent,
-            connection_id: 1
-        })
-        .then(res => finishSubmit(res.data.message))
-        .catch(err => handleError(err));
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setSelectedFile(e.target.files[0]);
     }
   };
 
-  const finishSubmit = (msg: string) => {
-    alert(msg);
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSending(true);
+
+    try {
+        if (sendMode === 'single') {
+            const formData = new FormData();
+            formData.append('phone_dest', targetPhone);
+            formData.append('content', msgContent || " ");
+            formData.append('connection_id', "1");
+            
+            if (selectedFile) {
+                formData.append('file', selectedFile);
+            }
+
+            await axios.post('http://127.0.0.1:8000/messages', formData);
+            finishSubmit();
+
+        } else {
+            await axios.post('http://127.0.0.1:8000/broadcast', {
+                group_id: parseInt(selectedGroupId),
+                content: msgContent,
+                connection_id: 1
+            });
+            finishSubmit();
+        }
+    } catch (err: any) {
+        handleError(err);
+    }
+  };
+
+  const finishSubmit = () => {
+    console.log("Envio realizado com sucesso.");
     setIsModalOpen(false);
     setMsgContent("");
     setTargetPhone("");
+    setSelectedFile(null);
     setSending(false);
     fetchData();
   };
 
   const handleError = (err: any) => {
-    alert("Erro: " + err.message);
+    console.error(err);
+    alert("Erro ao processar: " + (err.response?.data?.detail || err.message));
     setSending(false);
   };
 
-  const inputStyle = "w-full bg-slate-900 border border-slate-700 rounded p-3 text-white focus:border-blue-500 focus:outline-none mb-4";
+  const inputStyle = `w-full bg-slate-900 border border-slate-700 rounded p-3 text-white focus:border-blue-500 focus:outline-none mb-4`;
 
   return (
     <div>
@@ -115,7 +128,6 @@ export default function Messages() {
         </div>
       </div>
 
-      {/* Modal de Envio */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 w-full max-w-md shadow-2xl animate-fade-in">
@@ -126,17 +138,16 @@ export default function Messages() {
                     </button>
                 </div>
                 
-                {/* Abas */}
                 <div className="flex bg-slate-900 p-1 rounded-lg mb-6">
                     <button 
                         onClick={() => setSendMode('single')}
-                        className={"flex-1 py-2 text-sm font-bold rounded-md flex items-center justify-center gap-2 transition-all " + (sendMode === 'single' ? "bg-slate-700 text-white shadow" : "text-slate-500 hover:text-slate-300")}
+                        className={`flex-1 py-2 text-sm font-bold rounded-md flex items-center justify-center gap-2 transition-all ${sendMode === 'single' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}
                     >
                         <Smartphone size={16} /> Individual
                     </button>
                     <button 
                         onClick={() => setSendMode('group')}
-                        className={"flex-1 py-2 text-sm font-bold rounded-md flex items-center justify-center gap-2 transition-all " + (sendMode === 'group' ? "bg-blue-600 text-white shadow" : "text-slate-500 hover:text-slate-300")}
+                        className={`flex-1 py-2 text-sm font-bold rounded-md flex items-center justify-center gap-2 transition-all ${sendMode === 'group' ? 'bg-blue-600 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}
                     >
                         <Users size={16} /> Grupo / Todos
                     </button>
@@ -182,13 +193,34 @@ export default function Messages() {
                         className={inputStyle}
                         value={msgContent}
                         onChange={e => setMsgContent(e.target.value)}
-                        required
                     />
+
+                    {sendMode === 'single' && (
+                        <div className="mb-4">
+                            <label className="block text-slate-400 text-sm mb-1">Anexar Mídia (Opcional)</label>
+                            <div className="flex items-center gap-2">
+                                <label className="cursor-pointer bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded flex items-center gap-2 border border-slate-600 transition-colors w-full justify-center border-dashed border-2">
+                                    <Paperclip size={16} />
+                                    <span className="text-sm">{selectedFile ? selectedFile.name : "Escolher Arquivo"}</span>
+                                    <input type="file" className="hidden" onChange={handleFileChange} />
+                                </label>
+                                {selectedFile && (
+                                    <button 
+                                        type="button" 
+                                        onClick={() => setSelectedFile(null)}
+                                        className="bg-red-500/20 text-red-400 p-2 rounded hover:bg-red-500/30"
+                                    >
+                                        <Trash2 size={18} />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    )}
 
                     <button 
                         type="submit" 
                         disabled={sending}
-                        className={"w-full py-3 rounded-lg font-bold transition-colors disabled:opacity-50 " + (sendMode === 'group' ? "bg-blue-600 hover:bg-blue-700 text-white" : "bg-green-600 hover:bg-green-700 text-white")}
+                        className={`w-full py-3 rounded-lg font-bold transition-colors disabled:opacity-50 ${sendMode === 'group' ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-green-600 hover:bg-green-700 text-white'}`}
                     >
                         {sending ? "Processando..." : (
                             sendMode === 'group' 
@@ -201,7 +233,6 @@ export default function Messages() {
         </div>
       )}
 
-      {/* Tabela de Mensagens */}
       <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-xl">
         <table className="w-full text-left">
           <thead className="bg-slate-900 text-slate-400 uppercase text-xs font-bold">
@@ -236,7 +267,7 @@ export default function Messages() {
                   <td className="p-4 font-bold">{msg.phone_dest}</td>
                   <td className="p-4 truncate max-w-xs" title={msg.content}>{msg.content}</td>
                   <td className="p-4">
-                    <span className={"px-3 py-1 rounded-full text-xs font-bold flex items-center gap-2 w-fit " + statusColor}>
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-2 w-fit ${statusColor}`}>
                       <StatusIcon size={14} />
                       {msg.status.toUpperCase()}
                     </span>

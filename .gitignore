@@ -1,22 +1,16 @@
-﻿# --- PYTHON ---
-__pycache__/
-*.py[cod]
-*$py.class
-venv/
-env/
-.env
+﻿# Ignorar Cache do Chrome (CRÍTICO)
+backend/chrome_cache/
+backend/chrome_cache
+backend/uploads/
+backend/__pycache__/
+backend/venv/
+backend/dist/
+backend/*.spec
 
-# --- DISTRIBUIÇÃO & BUILD (LIXO) ---
-build/
-dist/
-*.spec
-
-# --- FRONTEND (NODE) ---
-node_modules/
+# Ignorar Node Modules (Frontend)
 frontend/node_modules/
 frontend/dist/
-frontend/.env
 
-# --- ARQUIVOS DE SISTEMA ---
+# Ignorar logs e temporários
+*.log
 .DS_Store
-Thumbs.db
