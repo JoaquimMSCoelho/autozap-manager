@@ -4,3 +4,6 @@ sqlalchemy
 pydantic
 selenium
 webdriver-manager
+psutil
+pandas
+python-multipart
