@@ -1,15 +1,14 @@
 ﻿# Ignorar Cache do Chrome (CRÍTICO)
-backend/chrome_cache/
-backend/chrome_cache
-backend/uploads/
-backend/__pycache__/
-backend/venv/
-backend/dist/
-backend/*.spec
+*/chrome_cache
+*/uploads/
+*/__pycache__/
+*/venv/
+*/dist/
+*/*.spec
 
-# Ignorar Node Modules (Frontend)
-frontend/node_modules/
-frontend/dist/
+# Ignorar Node Modules (anywhere)
+*/node_modules/
+*/dist/
 
 # Ignorar logs e temporários
 *.log
