@@ -21,7 +21,7 @@ import uvicorn
 
 # --- CONFIGURACAO INICIAL ---
 models.Base.metadata.create_all(bind=engine)
-app = FastAPI()
+app = FastAPI(title="AutoZap Manager API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -36,6 +36,26 @@ KNOWN_PREFIXES = [
     "INF", "MEI", "FAM", "DEP", "SIC", "LAN", "MAN", "NIP", 
     "AD", "IR"
 ]
+
+# --- ROTA DE CORREÇÃO DO ÍCONE (NOVO) ---
+@app.get("/logo.ico")
+async def serve_favicon():
+    """
+    Rota específica para entregar o ícone no modo produção (Porta 8000).
+    Calcula o caminho base dependendo se é DEV ou EXE.
+    """
+    if getattr(sys, 'frozen', False):
+        # Modo Executável (PyInstaller)
+        base_path = os.path.dirname(sys.executable)
+        icon_path = os.path.join(base_path, "frontend", "dist", "logo.ico")
+    else:
+        # Modo Desenvolvimento (Python Script)
+        base_path = os.path.dirname(os.path.dirname(__file__))
+        icon_path = os.path.join(base_path, "frontend", "dist", "logo.ico")
+    
+    if os.path.exists(icon_path):
+        return FileResponse(icon_path)
+    return {"status": "error", "message": "Ícone não encontrado na pasta dist."}
 
 # --- WORKER (ROBO EM PLANO DE FUNDO) ---
 def background_worker():
@@ -173,11 +193,10 @@ def create_broadcast(broadcast: schemas.BroadcastCreate, db: Session = Depends(g
 def list_messages(db: Session = Depends(get_db)):
     return db.query(models.Message).order_by(models.Message.created_at.desc()).limit(100).all()
 
-# --- ROTA CORRIGIDA (BLINDAGEM CONTRA TEXTO VAZIO) ---
 @app.post("/messages")
 def create_message(
     phone_dest: str = Form(...), 
-    content: Optional[str] = Form(""), # <--- CORREÇÃO 1: Permite vazio por padrão
+    content: Optional[str] = Form(""), 
     connection_id: int = Form(1), 
     file: UploadFile = File(None), 
     db: Session = Depends(get_db)
@@ -186,23 +205,19 @@ def create_message(
     media_path = None
     if file:
         os.makedirs("uploads", exist_ok=True)
-        # Sanitizar nome se necessario, mas mantendo simples
         file_location = os.path.join("uploads", file.filename)
         with open(file_location, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         media_path = os.path.abspath(file_location)
 
-    # 2. Prepara conteudo para o Robo (A TRAVA DE SEGURANÇA)
-    # Garante que seja string, mesmo que venha None
+    # 2. Prepara conteudo para o Robo (BLINDAGEM CONTRA VAZIO)
     safe_content = content if content else ""
     
     final_content = safe_content
     if media_path:
-        # Truque: Anexa o caminho da imagem no texto
-        # Mesmo que safe_content seja "", vai ficar "|||media:C:\..."
+        # Lógica original recuperada: Anexa o caminho da imagem no texto
         final_content = f"{safe_content}|||media:{media_path}"
 
-    # Validação Extra: Se não tem texto E não tem arquivo, erro.
     if not final_content.strip() and not media_path:
          return {"status": "error", "message": "Mensagem vazia (sem texto e sem arquivo)."}
 
@@ -256,11 +271,13 @@ if os.path.exists(frontend_path):
 
     @app.get("/{full_path:path}")
     async def serve_frontend(full_path: str):
-        if full_path.startswith("api/") or full_path.startswith("bot/") or full_path.startswith("messages"):
+        # Evita conflito com rotas de API
+        if full_path.startswith("api/") or full_path.startswith("bot/") or full_path.startswith("messages") or full_path.startswith("logo.ico"):
              raise HTTPException(status_code=404, detail="API route not found")
         return FileResponse(os.path.join(frontend_path, "index.html"))
 else:
     print("AVISO CRITICO: Pasta frontend/dist nao encontrada.")
 
 if __name__ == "__main__":
+    print("--- INICIANDO AUTOZAP MANAGER COM ÍCONE ---")
     uvicorn.run(app, host="127.0.0.1", port=8000)

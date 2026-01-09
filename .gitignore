@@ -1,15 +1,18 @@
-﻿# Ignorar Cache do Chrome (CRÍTICO)
-*/chrome_cache
-*/uploads/
-*/__pycache__/
-*/venv/
-*/dist/
-*/*.spec
 
-# Ignorar Node Modules (anywhere)
-*/node_modules/
-*/dist/
+# Python
+__pycache__/
+*.py[cod]
+*.class
+venv/
+.env
 
-# Ignorar logs e temporários
-*.log
+# AutoZap Espec�fico
+chrome_cache/
+backend/chrome_cache/
+uploads/
+
+# Frontend / Node
+node_modules/
+dist/
 .DS_Store
+

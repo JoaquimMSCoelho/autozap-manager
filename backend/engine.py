@@ -6,10 +6,11 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.action_chains import ActionChains
 import time
 import os
 import urllib.parse
-import psutil # BIBLIOTECA DE LIMPEZA SEGURA
+import psutil 
 
 class WhatsAppBot:
     def __init__(self):
@@ -17,66 +18,42 @@ class WhatsAppBot:
         self.is_running = False
 
     def _kill_zombies(self):
-        """
-        FAXINEIRO CIRÚRGICO (SAFE MODE):
-        Varre os processos e só mata o Chrome se ele estiver rodando 
-        dentro da pasta 'chrome_cache' deste projeto.
-        Protege o navegador pessoal do usuário.
-        """
+        """FAXINEIRO CIRÚRGICO"""
         print("[INFO] Iniciando varredura de processos zumbis...")
-        
         current_dir = os.getcwd()
         target_folder = "chrome_cache"
         killed_count = 0
         
-        # 1. Mata Drivers (ChromeDriver é seguro matar pois é só de automação)
-        for proc in psutil.process_iter(['pid', 'name']):
-            try:
-                if proc.info['name'] and 'chromedriver' in proc.info['name'].lower():
-                    proc.kill()
-            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-                pass
-
-        # 2. Mata Chromes ESPECÍFICOS do Robô
         for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
             try:
-                # Verifica se é chrome
                 if proc.info['name'] and 'chrome' in proc.info['name'].lower():
                     cmdline = proc.info.get('cmdline', [])
                     if cmdline:
-                        # Transforma lista de comandos em string
                         cmd_str = " ".join(cmdline)
-                        
-                        # A LÓGICA DE SEGURANÇA:
-                        # Só mata se o comando conter o caminho da nossa pasta de cache
                         if target_folder in cmd_str and current_dir in cmd_str:
-                            print(f"[CLEANER] Matando Chrome Zumbi (PID: {proc.info['pid']})...")
                             proc.kill()
                             killed_count += 1
-            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                elif proc.info['name'] and 'chromedriver' in proc.info['name'].lower():
+                    proc.kill()
+            except:
                 pass
         
         if killed_count > 0:
-            print(f"[INFO] Limpeza concluída. {killed_count} processos do robô removidos.")
-            time.sleep(2) # Tempo para o Windows liberar o arquivo
-        else:
-            print("[INFO] Nenhum processo zumbi encontrado. Sistema limpo.")
+            print(f"[INFO] Limpeza concluída. {killed_count} processos removidos.")
+            time.sleep(2) 
 
     def start(self):
-        """Inicia o navegador Chrome controlado."""
         if self.is_running:
             return {"status": "already_running", "message": "Robo ja esta rodando!"}
 
         try:
-            # --- LIMPEZA SEGURA ANTES DE INICIAR ---
             self._kill_zombies()
-
-            print("[INFO:AutoZapEngine] --- MOTOR V11: SURGICAL CLEANER & OMNI-ENGINE ---")
+            print("[INFO:AutoZapEngine] --- MOTOR V17: TYPE & CLICK (HIBRIDO) ---")
+            
             chrome_options = Options()
             chrome_options.add_argument("--no-sandbox")
             chrome_options.add_argument("--disable-dev-shm-usage")
             
-            # Cache do Perfil (Onde fica o Login)
             dir_path = os.getcwd()
             profile_path = os.path.join(dir_path, "chrome_cache")
             chrome_options.add_argument(f"user-data-dir={profile_path}")
@@ -86,27 +63,24 @@ class WhatsAppBot:
             
             print("[INFO] Abrindo WhatsApp...")
             self.driver.get("https://web.whatsapp.com")
-            
             self.is_running = True
-            return {"status": "success", "message": "Navegador iniciado com sucesso."}
+            return {"status": "success", "message": "Navegador iniciado."}
         except Exception as e:
-            print(f"[ERRO CRITICO AO INICIAR] {str(e)}")
+            print(f"[ERRO AO INICIAR] {str(e)}")
             return {"status": "error", "message": str(e)}
 
     def stop(self):
-        """Para o navegador."""
         if self.driver:
             self.driver.quit()
             self.driver = None
         self.is_running = False
         return {"status": "success", "message": "Navegador fechado."}
 
-    def _force_click(self, element):
-        """Clique via JS para garantir que nada bloqueie"""
+    def _click_element(self, element):
+        """Marreta JS"""
         self.driver.execute_script("arguments[0].click();", element)
 
     def send_message(self, phone, message_content):
-        """Lógica central de envio unificada."""
         if not self.is_running or not self.driver:
             return {"status": "error", "message": "O robo esta desligado."}
 
@@ -130,15 +104,15 @@ class WhatsAppBot:
             # 3. Aguarda Chat
             try:
                 WebDriverWait(self.driver, 30).until(
-                    EC.presence_of_element_located((By.XPATH, '//div[@contenteditable="true"][@data-tab="10"]'))
+                    EC.presence_of_element_located((By.XPATH, '//div[@contenteditable="true"]'))
                 )
             except:
-                print(f"[TIMEOUT] Chat nao carregou para {phone}. Pulando...")
+                print(f"[TIMEOUT] Chat nao carregou para {phone}.")
                 return {"status": "error", "message": "Timeout chat"}
 
             time.sleep(2)
 
-            # 4. ROTINA DE ARQUIVO
+            # 4. ROTINA DE MÍDIA (V17: Escreve -> Espera -> Clica)
             if media_path:
                 if not os.path.exists(media_path):
                     print(f"[ERRO] Arquivo nao existe: {media_path}")
@@ -146,7 +120,7 @@ class WhatsAppBot:
                     try:
                         print(f"[ENGINE] Injetando midia: {media_path}")
                         
-                        # Revela inputs ocultos
+                        # Injeção
                         self.driver.execute_script("""
                         document.querySelectorAll("input[type='file']").forEach(i => {
                             i.style.display='block'; i.style.height='1px'; i.style.opacity='1';
@@ -154,76 +128,81 @@ class WhatsAppBot:
                         """)
                         
                         file_inputs = self.driver.find_elements(By.CSS_SELECTOR, "input[type='file']")
-                        if not file_inputs: raise Exception("Input file sumiu")
-
-                        target = file_inputs[0]
-                        ext = os.path.splitext(media_path)[1].lower()
-                        is_video = ext in ['.mp4', '.avi', '.mov', '.mkv']
-                        
-                        # Tenta input especifico de imagem/video se necessario
-                        if ext in ['.jpg', '.jpeg', '.png', '.mp4', '.avi']:
-                             for inp in file_inputs:
-                                if "image" in (inp.get_attribute("accept") or ""):
-                                    target = inp
-                                    break
-                        
-                        target.send_keys(os.path.abspath(media_path))
-                        print("[ENGINE] Caminho injetado. Aguardando Preview...")
-
-                        # SMART WAIT (Espera Inteligente)
-                        wait_time = 15 if is_video else 4
-                        time.sleep(wait_time) 
-                        
-                        # OMNI-CLICKER (Busca agressiva pelo botão enviar)
-                        selectors = [
-                            '//span[@data-icon="send"]', 
-                            '//div[@aria-label="Enviar"]',
-                            '//span[@data-icon="send-light"]'
-                        ]
-                        
-                        clicked = False
-                        start_try = time.time()
-                        print("[ENGINE] Procurando botão de enviar no preview...")
-                        while time.time() - start_try < 10:
-                            for xpath in selectors:
-                                try:
-                                    btns = self.driver.find_elements(By.XPATH, xpath)
-                                    for btn in btns:
-                                        if btn.is_displayed():
-                                            self._force_click(btn)
-                                            clicked = True
-                                            print(f"[ENGINE] SUCESSO: Clicado no Preview com {xpath}")
-                                            break
+                        if file_inputs:
+                            target = file_inputs[0]
+                            ext = os.path.splitext(media_path)[1].lower()
+                            if ext in ['.jpg', '.jpeg', '.png', '.mp4', '.avi']:
+                                for inp in file_inputs:
+                                    if "image" in (inp.get_attribute("accept") or ""):
+                                        target = inp
+                                        break
+                            
+                            target.send_keys(os.path.abspath(media_path))
+                            print("[ENGINE] Aguardando Preview...")
+                            
+                            # Espera a caixa de legenda aparecer e ficar interativa
+                            try:
+                                caption_box = WebDriverWait(self.driver, 15).until(
+                                    EC.element_to_be_clickable((By.XPATH, '//div[@contenteditable="true"]'))
+                                )
+                                time.sleep(1) # Estabiliza
+                                
+                                # --- PASSO 1: DIGITAR (Se tiver texto) ---
+                                if text_msg:
+                                    print("[ENGINE] Digitando legenda...")
+                                    caption_box.click() # Foca
+                                    # Limpa eventual lixo da URL
+                                    caption_box.clear() 
+                                    # Digita
+                                    caption_box.send_keys(text_msg)
+                                    time.sleep(1) # Espera o React processar o texto
+                                
+                                # --- PASSO 2: CLICAR NO BOTÃO (Não usar Enter) ---
+                                print("[ENGINE] Buscando botão enviar...")
+                                send_buttons_xpaths = [
+                                    '//span[@data-icon="send"]',
+                                    '//div[@aria-label="Enviar"]',
+                                    '//div[contains(@class, "btn")]//span[@data-icon="send"]'
+                                ]
+                                
+                                clicked = False
+                                for xpath in send_buttons_xpaths:
+                                    try:
+                                        btns = self.driver.find_elements(By.XPATH, xpath)
+                                        for btn in btns:
+                                            if btn.is_displayed():
+                                                print(f"[ENGINE] Clicando no botão ({xpath})...")
+                                                self._click_element(btn)
+                                                clicked = True
+                                                break
+                                    except: pass
                                     if clicked: break
-                                except: pass
-                            if clicked: break
-                            time.sleep(1)
+                                
+                                if not clicked:
+                                    print("[AVISO] Botão não clicado. Tentando Enter de emergência.")
+                                    ActionChains(self.driver).send_keys(Keys.ENTER).perform()
 
-                        if not clicked:
-                            print("[AVISO] Omni-Clicker falhou. Tentando Enter.")
-                            webdriver.ActionChains(self.driver).send_keys(Keys.ENTER).perform()
+                            except Exception as e_step:
+                                print(f"[FALHA STEPS] {str(e_step)}")
 
-                        time.sleep(15 if is_video else 5)
-                        return {"status": "sent", "message": "Enviado com anexo"}
+                            is_video = ext in ['.mp4', '.avi']
+                            time.sleep(15 if is_video else 5)
+                            return {"status": "sent", "message": "Enviado com anexo"}
 
                     except Exception as e:
                         print(f"[FALHA ANEXO] {str(e)}")
 
-            # 5. ROTINA DE TEXTO (Só se tiver texto e anexo falhou ou não existe)
+            # 5. ROTINA DE TEXTO (Se não tinha mídia)
             if text_msg and text_msg.strip() != "":
+                print("[ENGINE] Verificando envio de texto puro...")
                 try:
-                    if "http" in text_msg:
-                        print("[ENGINE] Link detectado. Aguardando preview...")
-                        time.sleep(3)
-
                     box = self.driver.find_element(By.XPATH, '//div[@contenteditable="true"][@data-tab="10"]')
                     if box.text.strip():
-                        box.send_keys(Keys.ENTER)
-                        print("[ENGINE] Texto/Link enviado.")
-                    else:
-                        print("[ENGINE] Caixa vazia (Texto ja foi com anexo).")
+                        # Clica no botão enviar em vez de dar enter
+                        send_btn = self.driver.find_element(By.XPATH, '//span[@data-icon="send"]')
+                        self._click_element(send_btn)
                 except:
-                    pass 
+                    ActionChains(self.driver).send_keys(Keys.ENTER).perform()
 
             time.sleep(2)
             return {"status": "sent", "message": "Processado"}
